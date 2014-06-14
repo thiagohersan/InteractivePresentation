@@ -1,4 +1,4 @@
-InteractivePresentation
+IteractivePresentation
 =======================
 
 
@@ -10,6 +10,5 @@ using
 
 ofxTextSuite
 https://github.com/lukemalcolm/ofxTextSuite
-
 ofxTransparentWindow
 https://github.com/radames/ofxTransparentWindow
