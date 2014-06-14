@@ -5,5 +5,6 @@ secrets*.txt
 .DS_Store
 *.pbxuser
 xcuserdata
+xcshareddata
 bin/
 Python/data
