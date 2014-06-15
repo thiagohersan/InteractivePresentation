@@ -1,4 +1,4 @@
-IteractivePresentation
+InteractivePresentation
 =======================
 Application that displays SMS and Twitter messages using semi-transparent overlay  
   
