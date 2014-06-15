@@ -108,8 +108,8 @@ def loop():
             smsSeconds = timegm(strptime(sms.date_sent, "%a, %d %b %Y %H:%M:%S +0000"))
             if (smsSeconds > newestSmsSeconds):
                 newestSmsSeconds = smsSeconds
-            print "sms: %s" % (sms.body)
-            body = str(sms.body).lower()
+            print "sms: %s" % (sms.body.encode("utf-8"))
+            body = sms.body.encode("utf-8").lower()
             ## clean, tag and send text
             cleanTagAndSendText(body)
         lastSmsCheck = time()
