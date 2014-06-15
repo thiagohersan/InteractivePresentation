@@ -9,7 +9,7 @@
 // listen on port 8888
 #define PORT 8888
 
-#define MSG_TIME 2000 //max time per message in milliseconds
+#define MSG_TIME 6000 //max time per message in milliseconds
 
 class ofApp : public ofBaseApp
 {
