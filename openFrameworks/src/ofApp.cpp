@@ -17,7 +17,7 @@ void ofApp::setup()
 
     lastTime = 0;
     enableMsgSys = false;
-    
+    msg_strings.push_back("Hello this is a test. Done.");
 }
 
 void ofApp::update()
