@@ -12,7 +12,7 @@ from twilio.rest import TwilioRestClient
 
 ## What to search for
 SEARCH_TERMS = ["@thiagohersan", "@radamar","#thiagohersan", "#radamar"]
-PHONE_NUMBER = "+15105647823"
+PHONE_NUMBER = "+15103234535"
 DISPLAY_ADDR = '127.0.0.1'
 DISPLAY_PORT = 8888
 
