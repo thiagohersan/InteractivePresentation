@@ -1,18 +1,19 @@
 # -*- coding: utf-8 -*-
 
-import sys, getopt, re
-from time import time, sleep, strptime, strftime, localtime, gmtime
-from calendar import timegm
+import sys, re
+import json
+from time import time, sleep
+from datetime import datetime, timedelta
 from threading import Thread
-from Queue import Queue
-from cPickle import dump, load
+from queue import Queue
 from OSC import OSCClient, OSCMessage, OSCClientError
 from twython import TwythonStreamer
-from twilio.rest import TwilioRestClient
+from twilio.rest import Client
+import pytz
+import codecs
 
-## What to search for
-SEARCH_TERMS = ["@thiagohersan", "@radamar","#thiagohersan", "#radamar"]
-PHONE_NUMBER = "+15103234535"
+utc=pytz.UTC
+
 DISPLAY_ADDR = '127.0.0.1'
 DISPLAY_PORT = 8888
 
@@ -23,9 +24,9 @@ class TwitterStreamReceiver(TwythonStreamer):
     def on_success(self, data):
         if ('text' in data):
             self.tweetQ.put(data['text'].encode('utf-8'))
-            print "received %s" % (data['text'].encode('utf-8'))
+            print("received %s" % (data['text'].encode('utf-8')))
     def on_error(self, status_code, data):
-        print status_code
+        print(status_code)
     def empty(self):
         return self.tweetQ.empty()
     def get(self):
@@ -36,55 +37,56 @@ def setup():
     global lastSmsCheck, mySmsClient, newestSmsSeconds
     global myOscClient
     global logFile
-    secrets = {}
+    global PHONE_NUMBER
     lastTwitterCheck = time()
     lastSmsCheck = time()
-    newestSmsSeconds = timegm(gmtime())
+    newestSmsSeconds = datetime.now(utc)
 
     ## read secrets from file
-    inFile = open('oauth.txt', 'r')
-    for line in inFile:
-        (k,v) = line.split()
-        secrets[k] = v
+    with open('secrets.json') as dataFile:
+        secrets = json.load(dataFile)
 
+    SEARCH_TERMS = secrets["search_terms"]
+    PHONE_NUMBER = secrets["phone_number"]
     ## start Twitter stream reader
-    myTwitterStream = TwitterStreamReceiver(app_key = secrets['CONSUMER_KEY'],
-                                            app_secret = secrets['CONSUMER_SECRET'],
-                                            oauth_token = secrets['ACCESS_TOKEN'],
-                                            oauth_token_secret = secrets['ACCESS_SECRET'])
+    myTwitterStream = TwitterStreamReceiver(app_key = secrets["twitter"]['CONSUMER_KEY'],
+                                            app_secret = secrets["twitter"]['CONSUMER_SECRET'],
+                                            oauth_token = secrets["twitter"]['ACCESS_TOKEN'],
+                                            oauth_token_secret = secrets["twitter"]['ACCESS_SECRET'])
     streamThread = Thread(target=myTwitterStream.statuses.filter, kwargs={'track':','.join(SEARCH_TERMS)})
+    streamThread.daemon = True
     streamThread.start()
 
     ## start Twilio client
-    mySmsClient = TwilioRestClient(account=secrets['ACCOUNT_SID'],
-                                   token=secrets['AUTH_TOKEN'])
+    mySmsClient = Client(secrets["twilio"]['ACCOUNT_SID'],secrets["twilio"]['AUTH_TOKEN'])
 
     myOscClient = OSCClient()
 
     ## open new file for writing log
-    logFile = open("data/"+strftime("%Y%m%d-%H%M%S", localtime())+".log", "a")
+    now = datetime.now(utc)
+    logFile = codecs.open("logs/" + now.isoformat() + ".log", "a", "utf-8")
 
 def cleanTagAndSendText(text):
     ## removes punctuation
     text = re.sub(r'[.,;:!?*/+=\-&%^/\\_$~()<>{}\[\]]', ' ', text)
     ## replaces double-spaces with single space
     text = re.sub(r'( +)', ' ', text)
-
     ## log
-    logFile.write(strftime("%Y%m%d-%H%M%S", localtime())+"***"+text+"\n")
+    now = datetime.now(utc)
+    logFile.write(now.isoformat() + "  ***  "+ text +"\n")
     logFile.flush()
 
     ## forward to all subscribers
     msg = OSCMessage()
     msg.setAddress("/airmsg/response")
-    msg.append(text)
+    msg.append(text.encode('utf-8'))
 
     try:
         myOscClient.connect((DISPLAY_ADDR, DISPLAY_PORT))
         myOscClient.sendto(msg, (DISPLAY_ADDR, DISPLAY_PORT))
         myOscClient.connect((DISPLAY_ADDR, DISPLAY_PORT))
     except OSCClientError:
-        print "no connection to %s : %s, can't send message" % (DISPLAY_ADDR, DISPLAY_PORT)
+        print("no connection to %s : %s, can't send message" % (DISPLAY_ADDR, DISPLAY_PORT))
 
 def loop():
     global lastTwitterCheck, myTwitterStream, streamThread
@@ -92,6 +94,8 @@ def loop():
     ## check twitter queue
     if((time()-lastTwitterCheck > 5) and (not myTwitterStream.empty())):
         tweet = myTwitterStream.get().lower()
+        tweet = tweet.decode('utf-8')
+
         ## removes re-tweet
         tweet = re.sub(r'(^[rR][tT] )', '', tweet)
         ## removes hashtags, arrobas and links
@@ -102,14 +106,13 @@ def loop():
 
     ## check sms
     if(time()-lastSmsCheck > 5):
-        smss = mySmsClient.messages.list(to=PHONE_NUMBER,
-                                         after=strftime("%a, %d %b %Y %H:%M:%S", gmtime(newestSmsSeconds+1)))
+        smss = mySmsClient.messages.list(to=PHONE_NUMBER, date_sent_after = newestSmsSeconds)
         for sms in smss:
-            smsSeconds = timegm(strptime(sms.date_sent, "%a, %d %b %Y %H:%M:%S +0000"))
+            smsSeconds = sms.date_sent
             if (smsSeconds > newestSmsSeconds):
                 newestSmsSeconds = smsSeconds
-            print "sms: %s" % (sms.body.encode("utf-8"))
-            body = sms.body.encode("utf-8").lower()
+            print("sms: %s" % (sms.body.encode("utf-8")))
+            body = sms.body.lower()
             ## clean, tag and send text
             cleanTagAndSendText(body)
         lastSmsCheck = time()
@@ -128,5 +131,4 @@ if __name__=="__main__":
     except KeyboardInterrupt :
         logFile.close()
         myTwitterStream.disconnect()
-        streamThread.join()
         sys.exit(0)
